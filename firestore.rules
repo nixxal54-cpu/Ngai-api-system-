@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. GLOBAL SAFETY NET
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive Helpers
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+
+    // User Model
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'createdAt', 'plan']) && 
+             data.keys().size() == 3 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.createdAt is number &&
+             data.plan is string && (data.plan == 'free' || data.plan == 'pro');
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow list: if false; // No blanket listing of users
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming());
+      allow update: if isSignedIn() && request.auth.uid == userId; // Allow plan changes for now
+      allow delete: if false;
+    }
+
+    // ApiKey Model
+    function isValidApiKey(data) {
+      return data.keys().hasAll(['userId', 'name', 'createdAt', 'active', 'maskedKey']) &&
+             data.keys().size() == 5 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.name is string && data.name.size() <= 128 &&
+             data.createdAt is number &&
+             data.active is bool &&
+             data.maskedKey is string && data.maskedKey.size() <= 128;
+    }
+
+    match /api_keys/{keyHash} {
+      // The backend needs to read the API key using its hash. 
+      // Knowing the 256-bit hash is proof of authentication for reading metadata.
+      allow get: if true;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isSignedIn() && 
+                    request.auth.uid == incoming().userId && 
+                    isValidApiKey(incoming());
+                    
+      allow update: if isSignedIn() && 
+                    request.auth.uid == existing().userId &&
+                    ((incoming().diff(existing()).affectedKeys().hasOnly(['active', 'name'])));
+                    
+      allow delete: if isSignedIn() && request.auth.uid == existing().userId;
+    }
+
+    // ApiRequest Model (Usage Logs)
+    function isValidApiRequest(data) {
+      return data.keys().hasAll(['userId', 'keyHash', 'model', 'promptTokens', 'completionTokens', 'durationMs', 'createdAt']) &&
+             data.keys().size() == 7 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.keyHash is string && data.keyHash.size() <= 128 &&
+             data.model is string && data.model.size() <= 128 &&
+             data.promptTokens is number &&
+             data.completionTokens is number &&
+             data.durationMs is number &&
+             data.createdAt is number;
+    }
+
+    match /requests/{requestId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      // Allow the Express backend to write requests logs anonymously.
+      // In a real production deployment outside this sandbox, this should use Firebase Admin.
+      allow create: if isValidApiRequest(incoming());
+      
+      allow update, delete: if false; // Immutable logs
+    }
+  }
+}

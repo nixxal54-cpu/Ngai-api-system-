@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile data",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "createdAt": { "type": "number", "description": "Timestamp" },
+        "plan": { "type": "string", "enum": ["free", "pro"] }
+      },
+      "required": ["email", "createdAt", "plan"]
+    },
+    "ApiKey": {
+      "title": "ApiKey",
+      "description": "API Key metadata (ID is hashed key)",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "active": { "type": "boolean" },
+        "maskedKey": { "type": "string" }
+      },
+      "required": ["userId", "name", "createdAt", "active", "maskedKey"]
+    },
+    "ApiRequest": {
+      "title": "ApiRequest",
+      "description": "Log of API usage",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "keyHash": { "type": "string" },
+        "model": { "type": "string" },
+        "promptTokens": { "type": "number" },
+        "completionTokens": { "type": "number" },
+        "durationMs": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "keyHash", "model", "promptTokens", "completionTokens", "durationMs", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "Stores user profiles."
+    },
+    "/api_keys/{keyHash}": {
+      "schema": { "$ref": "ApiKey" },
+      "description": "Stores user API keys metadata."
+    },
+    "/requests/{requestId}": {
+      "schema": { "$ref": "ApiRequest" },
+      "description": "Stores usage logs."
+    }
+  }
+}
